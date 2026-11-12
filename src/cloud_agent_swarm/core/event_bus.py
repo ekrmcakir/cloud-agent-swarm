@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Callable, Coroutine, Dict, List, Any, Optional
 import time
+import fnmatch
 import uuid
 
 @dataclass
@@ -13,7 +14,7 @@ class Event:
     id: str = field(default_factory=lambda: f"evt-{uuid.uuid4().hex[:8]}")
 
 class EventBus:
-    """Asynchronous Event Bus with pub/sub and wildcard topic routing."""
+    """High-performance Asynchronous Event Bus with glob pattern matching and ring-buffer history."""
     
     def __init__(self, max_history: int = 1000):
         self._subscribers: Dict[str, List[Callable[[Event], Coroutine[Any, Any, None]]]] = {}
@@ -27,12 +28,7 @@ class EventBus:
         self._subscribers[topic_pattern].append(handler)
 
     def _matches_topic(self, pattern: str, topic: str) -> bool:
-        if pattern == "*" or pattern == topic:
-            return True
-        if pattern.endswith(".*"):
-            prefix = pattern[:-2]
-            return topic == prefix or topic.startswith(prefix + ".")
-        return False
+        return fnmatch.fnmatch(topic, pattern)
 
     async def publish(self, topic: str, payload: Dict[str, Any], trace_id: Optional[str] = None) -> Event:
         event = Event(topic=topic, payload=payload)

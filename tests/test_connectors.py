@@ -46,6 +46,13 @@ class TestConnectors(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res["status"], "APPLIED")
         self.assertEqual(len(mock.executed_actions), 1)
 
+    async def test_all_catalog_scenarios_in_mock(self):
+        mock = MockCloudProvider()
+        for scenario_id in SCENARIO_CATALOG:
+            mock.set_scenario(scenario_id, {})
+            metrics = await mock.get_metrics("test", "test_metric", {})
+            self.assertIsNotNone(metrics)
+
 class TestScenarios(unittest.TestCase):
     def test_catalog_integrity(self):
         self.assertIn("oom_cascade", SCENARIO_CATALOG)

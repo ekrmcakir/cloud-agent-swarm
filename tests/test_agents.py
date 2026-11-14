@@ -40,5 +40,21 @@ class TestAgents(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.state.blast_radius.requires_human_approval)
         self.assertGreater(self.state.blast_radius.risk_score, 70.0)
 
+    async def test_remediation_planner_actions(self):
+        self.state.incident.root_cause = "Heap exhaustion in microservice cache layer"
+        planner = RemediationPlannerAgent()
+        msg = await planner.process_turn(self.state)
+
+        self.assertEqual(msg.verb, "PROPOSE_REMEDIATION")
+        self.assertIsNotNone(self.state.remediation_plan)
+        self.assertGreater(len(self.state.remediation_plan.actions), 0)
+        self.assertEqual(self.state.remediation_plan.actions[0].action_type, "scale_deployment")
+
+    async def test_commander_triage_loop(self):
+        commander = IncidentCommanderAgent()
+        msg = await commander.process_turn(self.state)
+        self.assertEqual(msg.verb, "TRIAGE_RESPONSE")
+        self.assertEqual(self.state.incident.status, IncidentStatus.TRIAGING)
+
 if __name__ == "__main__":
     unittest.main()

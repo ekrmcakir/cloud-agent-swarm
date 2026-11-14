@@ -30,5 +30,15 @@ class TestAgents(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(len(self.state.anomalies), 0)
         self.assertIn("Heap exhaustion", self.state.incident.root_cause)
 
+    async def test_blast_radius_evaluation(self):
+        self.state.incident.root_cause = "Compromised long-lived IAM Access Key"
+        blast_agent = BlastRadiusAnalystAgent()
+        msg = await blast_agent.process_turn(self.state)
+
+        self.assertEqual(msg.verb, "BLAST_RADIUS_EVALUATED")
+        self.assertIsNotNone(self.state.blast_radius)
+        self.assertTrue(self.state.blast_radius.requires_human_approval)
+        self.assertGreater(self.state.blast_radius.risk_score, 70.0)
+
 if __name__ == "__main__":
     unittest.main()

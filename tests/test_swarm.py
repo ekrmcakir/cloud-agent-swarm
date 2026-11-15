@@ -30,5 +30,24 @@ class TestSwarm(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Post-Mortem", state.postmortem_markdown)
         self.assertGreater(len(state.messages), 3)
 
+    def test_guardrails_blocks_destructive_forbidden_action(self):
+        enforcer = GuardrailEnforcer(max_replicas_limit=20)
+        forbidden_act = RemediationAction(
+            action_type="drop_database",
+            target_resource="production-rds",
+            risk_level="CRITICAL",
+        )
+        with self.assertRaises(GuardrailViolation):
+            enforcer.verify_action(forbidden_act)
+
+        scale_overflow = RemediationAction(
+            action_type="scale_deployment",
+            target_resource="checkout",
+            parameters={"replicas": 100},
+            risk_level="LOW",
+        )
+        with self.assertRaises(GuardrailViolation):
+            enforcer.verify_action(scale_overflow)
+
 if __name__ == "__main__":
     unittest.main()

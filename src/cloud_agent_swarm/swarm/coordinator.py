@@ -26,13 +26,17 @@ class SwarmCoordinator:
         self.hitl = hitl or HITLCheckpoint(auto_approve=True)
         self.postmortem_gen = PostMortemGenerator()
         self.message_history: List[AgentMessage] = []
+        self.execution_audit_trail: List[Dict[str, Any]] = []
 
     async def execute_swarm_loop(self, incident: Incident) -> SwarmState:
+        t0 = time.time()
         state = SwarmState(incident=incident)
+        self._audit("SWARM_INITIALIZED", {"incident_id": incident.id, "severity": incident.severity.value})
 
         # Stage 1: Commander Triage
         msg_triage = await self.commander.process_turn(state)
         self._record_message(state, msg_triage)
+        self._audit("TRIAGE_COMPLETED", {"status": state.incident.status.value})
 
         # Stage 2: Parallel Investigation & Blast Radius Assessment
         t_investigation = asyncio.create_task(self.investigator.process_turn(state))
@@ -40,6 +44,10 @@ class SwarmCoordinator:
         msg_invest, msg_blast = await asyncio.gather(t_investigation, t_blast)
         self._record_message(state, msg_invest)
         self._record_message(state, msg_blast)
+        self._audit("PARALLEL_ANALYSIS_COMPLETED", {
+            "root_cause": state.incident.root_cause,
+            "risk_score": state.blast_radius.risk_score if state.blast_radius else None,
+        })
 
         # Stage 3: Remediation Planning
         msg_plan = await self.remediation_planner.process_turn(state)
@@ -49,6 +57,7 @@ class SwarmCoordinator:
         if state.remediation_plan:
             for action in state.remediation_plan.actions:
                 self.guardrails.verify_action(action)
+            self._audit("GUARDRAILS_PASSED", {"action_count": len(state.remediation_plan.actions)})
 
         # Stage 5: Human-in-the-Loop Checkpoint
         if state.remediation_plan and state.remediation_plan.requires_human_approval:
@@ -56,8 +65,10 @@ class SwarmCoordinator:
             approval = await self.hitl.request_approval(state.remediation_plan)
             if approval.decision == ApprovalDecision.APPROVED:
                 state.remediation_plan.approved_by = approval.approved_by or "operator"
+                self._audit("HITL_APPROVED", {"approved_by": state.remediation_plan.approved_by})
             else:
                 state.incident.status = IncidentStatus.ABORTED
+                self._audit("HITL_REJECTED", {"reason": approval.reason})
                 return state
 
         # Stage 6: Safe Execution
@@ -69,6 +80,7 @@ class SwarmCoordinator:
                     parameters=action.parameters,
                 )
             state.remediation_plan.execution_status = "SUCCESS"
+            self._audit("REMEDIATION_EXECUTED", {"actions": len(state.remediation_plan.actions)})
 
         # Stage 7: Commander Final Resolution
         msg_resolve = await self.commander.process_turn(state)
@@ -77,8 +89,16 @@ class SwarmCoordinator:
         # Stage 8: Post-Mortem Generation
         state.postmortem_markdown = self.postmortem_gen.generate(state)
         state.is_completed = True
+        self._audit("SWARM_COMPLETED", {"elapsed_seconds": round(time.time() - t0, 3)})
         return state
 
     def _record_message(self, state: SwarmState, msg: AgentMessage):
         state.messages.append(msg)
         self.message_history.append(msg)
+
+    def _audit(self, event_name: str, payload: Dict[str, Any]):
+        self.execution_audit_trail.append({
+            "event": event_name,
+            "timestamp": time.time(),
+            "payload": payload,
+        })

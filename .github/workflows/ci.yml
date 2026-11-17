@@ -21,11 +21,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install Package & Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
       - name: Run Unit & Integration Tests
+        env:
+          PYTHONPATH: src
         run: |
           python -m unittest discover -s tests -p "test_*.py"
 
       - name: Run CLI Simulator Verification
+        env:
+          PYTHONPATH: src
         run: |
-          python -m cloud_agent_swarm.cli.main simulate --scenario oom_cascade
-          python -m cloud_agent_swarm.cli.main simulate --scenario iam_key_leak --json
+          cloud-swarm list-scenarios
+          cloud-swarm simulate --scenario oom_cascade
+          cloud-swarm simulate --scenario iam_key_leak --json

@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from typing import Callable, Coroutine, Dict, List, Any, Optional
+from collections import deque
 import time
 import fnmatch
 import uuid
@@ -14,13 +15,13 @@ class Event:
     id: str = field(default_factory=lambda: f"evt-{uuid.uuid4().hex[:8]}")
 
 class EventBus:
-    """High-performance Asynchronous Event Bus with glob pattern matching and ring-buffer history."""
+    """High-performance Asynchronous Event Bus with deque ring-buffer memory optimization."""
     
     def __init__(self, max_history: int = 1000):
         self._subscribers: Dict[str, List[Callable[[Event], Coroutine[Any, Any, None]]]] = {}
-        self._history: List[Event] = []
+        self._history: deque = deque(maxlen=max_history)
         self._max_history = max_history
-        self._dead_letter_queue: List[Dict[str, Any]] = []
+        self._dead_letter_queue: deque = deque(maxlen=200)
 
     def subscribe(self, topic_pattern: str, handler: Callable[[Event], Coroutine[Any, Any, None]]):
         if topic_pattern not in self._subscribers:
@@ -36,8 +37,6 @@ class EventBus:
             event.trace_id = trace_id
             
         self._history.append(event)
-        if len(self._history) > self._max_history:
-            self._history.pop(0)
 
         tasks = []
         for pattern, handlers in self._subscribers.items():

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cloud-agent-swarm
+description: Production Helm chart for CloudAgentSwarm autonomous SRE incident commander
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

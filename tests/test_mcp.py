@@ -32,5 +32,16 @@ class TestMCP(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res_list["id"], 1)
         self.assertIn("tools", res_list["result"])
 
+        # Test initialize
+        req_init = {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {}}
+        res_init = await server.handle_request(req_init)
+        self.assertEqual(res_init["id"], 2)
+        self.assertIn("protocolVersion", res_init["result"])
+
+        # Test ping
+        req_ping = {"jsonrpc": "2.0", "id": 3, "method": "ping", "params": {}}
+        res_ping = await server.handle_request(req_ping)
+        self.assertEqual(res_ping["id"], 3)
+
 if __name__ == "__main__":
     unittest.main()

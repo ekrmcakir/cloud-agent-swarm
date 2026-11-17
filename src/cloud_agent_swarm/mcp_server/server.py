@@ -15,7 +15,19 @@ class JSONRPCMCPServer:
         params = request.get("params", {})
         req_id = request.get("id")
 
-        if method == "tools/list":
+        if method == "initialize":
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "cloud-agent-swarm", "version": "1.0.0"},
+                },
+            }
+        elif method == "ping":
+            return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+        elif method == "tools/list":
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -60,6 +72,34 @@ class JSONRPCMCPServer:
                 return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Tool '{tool_name}' not found"}}
 
         return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32600, "message": "Invalid request"}}
+
+    async def run_stdio(self):
+        """Asynchronous stdio event loop processing line-delimited JSON-RPC messages."""
+        loop = asyncio.get_running_loop()
+        reader = asyncio.StreamReader()
+        protocol = asyncio.StreamReaderProtocol(reader)
+        await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            raw = line.decode("utf-8").strip()
+            if not raw:
+                continue
+            try:
+                request = json.loads(raw)
+                response = await self.handle_request(request)
+                sys.stdout.write(json.dumps(response) + "\n")
+                sys.stdout.flush()
+            except Exception as e:
+                err_resp = {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": -32700, "message": f"Parse error: {str(e)}"},
+                }
+                sys.stdout.write(json.dumps(err_resp) + "\n")
+                sys.stdout.flush()
 
 def create_mcp_server() -> JSONRPCMCPServer:
     return JSONRPCMCPServer()

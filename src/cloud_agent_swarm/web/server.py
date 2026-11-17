@@ -1,12 +1,18 @@
 import json
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from ..connectors.mock_provider import MockCloudProvider
 from ..scenarios.catalog import SCENARIO_CATALOG, get_scenario
 from ..swarm.coordinator import SwarmCoordinator
 from ..core.models import Incident
 
-# Lightweight standalone web application
+try:
+    from fastapi import FastAPI, HTTPException
+    from fastapi.responses import HTMLResponse, JSONResponse
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,29 +30,68 @@ HTML_PAGE = """<!DOCTYPE html>
 <body>
   <h1>⚡ CloudAgentSwarm — Incident War Room</h1>
   <div class="card">
-    <h3>Active Incident: Kubernetes OOMKilled Cascading CrashLoop</h3>
-    <p>Severity: <span class="sev1">SEV-1</span> | Status: <span style="color:#7ee787">MITIGATED</span></p>
-    <p>Root Cause: <em>Heap exhaustion in microservice cache layer</em></p>
-  </div>
-  <div class="card">
-    <h3>Agent Swarm Consensus Log</h3>
-    <pre>
-[incident_commander]     -> TRIAGE_RESPONSE          to: all
-[telemetry_investigator] -> TELEMETRY_ANOMALY_FOUND  to: incident_commander
-[blast_radius_analyst]   -> BLAST_RADIUS_EVALUATED   to: incident_commander
-[remediation_planner]    -> PROPOSE_REMEDIATION      to: incident_commander
-[incident_commander]     -> INCIDENT_RESOLVED        to: all
-    </pre>
+    <h3>Autonomous Multi-Agent Cloud SRE Cockpit</h3>
+    <p>Status: <span style="color:#7ee787">READY</span></p>
+    <p>Endpoints: <code>/api/scenarios</code>, <code>/api/trigger/{scenario_id}</code>, <code>/api/postmortem</code></p>
   </div>
 </body>
 </html>
 """
 
-class WarRoomApp:
-    def __init__(self):
-        self.html = HTML_PAGE
+def create_web_app():
+    if not FASTAPI_AVAILABLE:
+        class StandaloneWarRoomApp:
+            def __init__(self):
+                self.html = HTML_PAGE
+            def get_index_html(self) -> str:
+                return self.html
+        return StandaloneWarRoomApp()
 
-    def get_index_html(self) -> str:
-        return self.html
+    api = FastAPI(title="CloudAgentSwarm API", version="1.0.0")
+    provider = MockCloudProvider()
+    coordinator = SwarmCoordinator(provider)
+    last_state = {"state": None}
 
-app = WarRoomApp()
+    @api.get("/", response_class=HTMLResponse)
+    async def index():
+        return HTML_PAGE
+
+    @api.get("/api/scenarios")
+    async def list_scenarios():
+        return [
+            {
+                "id": s.id,
+                "name": s.name,
+                "severity": s.severity.value,
+                "description": s.description,
+            }
+            for s in SCENARIO_CATALOG.values()
+        ]
+
+    @api.post("/api/trigger/{scenario_id}")
+    async def trigger(scenario_id: str):
+        scen = get_scenario(scenario_id)
+        if not scen:
+            raise HTTPException(status_code=404, detail=f"Scenario {scenario_id} not found")
+
+        provider.set_scenario(scenario_id, {})
+        incident = Incident(
+            title=scen.name,
+            description=scen.description,
+            severity=scen.severity,
+            affected_services=[scen.target_service],
+        )
+        state = await coordinator.execute_swarm_loop(incident)
+        last_state["state"] = state
+        return state.to_dict()
+
+    @api.get("/api/postmortem")
+    async def get_postmortem():
+        st = last_state.get("state")
+        if not st or not st.postmortem_markdown:
+            raise HTTPException(status_code=404, detail="No post-mortem report available")
+        return {"postmortem_markdown": st.postmortem_markdown}
+
+    return api
+
+app = create_web_app()

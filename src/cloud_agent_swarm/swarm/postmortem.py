@@ -16,8 +16,11 @@ class PostMortemGenerator:
         md.append("## 1. Executive Summary")
         md.append(f"- **Summary:** {inc.description}")
         md.append(f"- **Root Cause:** {inc.root_cause or 'Under investigation'}")
-        duration_sec = (inc.resolved_at - inc.created_at) if inc.resolved_at else 45.0
-        md.append(f"- **Mean Time to Resolution (MTTR):** {duration_sec:.1f} seconds\n")
+        if inc.resolved_at:
+            duration_sec = inc.resolved_at - inc.created_at
+            md.append(f"- **Mean Time to Resolution (MTTR):** {duration_sec:.1f} seconds\n")
+        else:
+            md.append(f"- **Incident Outcome:** {inc.status.value}\n")
 
         md.append("## 2. Impact & Blast Radius Analysis")
         if blast:

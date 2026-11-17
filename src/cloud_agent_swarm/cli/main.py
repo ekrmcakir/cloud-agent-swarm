@@ -64,7 +64,9 @@ async def async_main():
     elif args.command == "mcp":
         from ..mcp_server.server import create_mcp_server
         server = create_mcp_server()
-        print("MCP Server ready on stdio.")
+        sys.stderr.write("CloudAgentSwarm MCP Server ready on stdio.\n")
+        sys.stderr.flush()
+        await server.run_stdio()
 
 def main():
     asyncio.run(async_main())
